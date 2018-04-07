@@ -13,13 +13,15 @@ THUMB_FRAMES = 10
 VIDEO_EXT = '.mp4'
 GIF_EXT = '.gif'
 
+USER = 'user'
+
 
 def main():
     logging.basicConfig(level=logging.INFO)
     # logging.info("Checking RTSP URL Result %r ", check_rtsp_url("rtsp://<host_name>:9990/test.mp4"))
-    create_mp4_thumbnail("/home/user/NAS/testvideo720paudio.mp4")
-    # attach_clips(["/home/user/NAS/testvideo720paudio.mp4", "/home/user/NAS/test1_good.mp4", ],
-                 #"/home/user/NAS/attached.mp4")
+    create_mp4_thumbnail("/home/" + USER + "/NAS/testvideo720paudio.mp4")
+    #attach_clips(["/home/" + USER + "/NAS/testvideo720paudio.mp4", "/home/" + USER + "/NAS/test1_good.mp4", ],
+     #            "/home/" + USER + "/NAS/attached.mp4")
 
 
 def attach_clips(file_clips, target_file):
@@ -51,10 +53,30 @@ def check_rtsp_url(rtsp_url):
     return is_valid
 
 
+def create_mp4_thumbnail_av(video_path):
+    logging.info("Creating thumbnail for %s ", video_path)
+
+    if check_valid_file(video_path, VIDEO_EXT):
+        """Extract frames from the video and creates thumbnails for one of each"""
+        logging.info("Extract frames from video %s ", video_path)
+        frames_path = video_to_frames_av(video_path)
+        thumb_video = thumbs_to_gif(video_path, frames_path)
+        if check_valid_file(thumb_video, GIF_EXT):
+            logging.info("Thumbnail for %s created as %s ", video_path, thumb_video)
+            remove_folder_if_exists(frames_path)
+            logging.info("Removed temporary thumbs path for %s created as %s ", video_path, frames_path)
+            return thumb_video
+        else:
+            logging.error("Thumbnail for %s cannot be created ", video_path)
+    else:
+        logging.error("No valid file at %s ", video_path)
+    return ""
+
+
 def create_mp4_thumbnail(video_path):
     logging.info("Creating thumbnail for %s ", video_path)
 
-    if check_valid_file(video_path):
+    if check_valid_file(video_path, VIDEO_EXT):
         """Extract frames from the video and creates thumbnails for one of each"""
         logging.info("Extract frames from video %s ", video_path)
         # Extract frames from video
@@ -75,9 +97,9 @@ def create_mp4_thumbnail(video_path):
             remove_file_if_exists(file_name_wo_suffix + '_thumbnail' + VIDEO_EXT)
             remove_file_if_exists(file_name_wo_suffix + '_thumbnail' + GIF_EXT)
             thumb_video = thumbs_to_gif(video_path, frames_path)
-            if check_valid_file(thumb_video):
+            if check_valid_file(thumb_video, GIF_EXT):
                 logging.info("Thumbnail for %s created as %s ", video_path, thumb_video)
-                remove_folder_if_exists(frames_path)
+                #remove_folder_if_exists(frames_path)
                 logging.info("Removed temporary thumbs path for %s created as %s ", video_path, frames_path)
                 return thumb_video
             else:
@@ -97,7 +119,7 @@ def thumbs_to_gif(video_path, thumbs_path):
     while index < THUMB_FRAMES:
         images.append(imageio.imread(thumbs_path + '/' + str(index) + '_' + str(THUMB_SIZE) + '.png'))
         index += 1
-    imageio.mimsave(thumb_gif_path, images, duration=5)
+    imageio.mimsave(thumb_gif_path, images)
     return thumb_gif_path
 
 
@@ -146,11 +168,25 @@ def thumbs_to_video(video_path, thumbs_path):
     return thumb_video_path
 
 
+def video_to_frames_av(video_filename):
+    logging.info("video_to_frames_av for video %s ", video_filename)
+    file_name_wo_suffix = get_string_strip_suffix(video_filename, VIDEO_EXT)
+    frames_path = file_name_wo_suffix + '_frames'
+    container = av.open(video_filename)
+    for i, frame in enumerate(container.decode(video=0)):
+        frame.to_image().save(frames_path + '/%d_320.png' % 1)
+        if i > 9:
+            break
+    return frames_path
+
+
 def video_to_frames(video_filename):
     """Extract frames from video"""
+    logging.info("video_to_frames for video %s ", video_filename)
     cap = cv2.VideoCapture(video_filename)
     video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - 1
     frames = []
+    logging.info("video_to_frames video length %d for video %s ", video_length, video_filename)
     if cap.isOpened() and video_length > 0:
         frame_ids = [0]
         if video_length >= 4:
@@ -213,20 +249,21 @@ def get_string_strip_suffix(text, suffix):
     return text[:len(text) - len(suffix)]
 
 
-def check_valid_file(video_path):
+def check_valid_file(video_path, file_ext):
     logging.info("Verifying check_valid_file %s ", video_path)
-    if not str(video_path).endswith(tuple(VIDEO_EXT)):
-        logging.error("Failed check_valid_file %s Not an MP4 ", video_path)
+    if not str(video_path).endswith(tuple(file_ext)):
+        logging.error("Failed check_valid_file %s Not an %s ", video_path, file_ext)
         return False
     video_file = Path(video_path)
     try:
-        video_file.resolve()
+        if video_file.exists() and video_file.is_file():
+            return True
     except FileNotFoundError:
         logging.error("Failed check_valid_file %s (Not Found) ", video_path)
         return False
     else:
-        logging.info("Success check_valid_file %s ", video_path)
-        return True
+        logging.info("Failed check_valid_file %s ", video_path)
+        return False
 
 
 main()
